@@ -58,7 +58,8 @@ async def create_stream(body: CreateStream, user: User = Depends(require_streame
 async def list_streams(status: str | None = None, mine: int = 0,
                        user: User | None = Depends(get_optional_user)):
     db = get_db()
-    query = """SELECT s.*, u.display_name AS streamer_name
+    query = """SELECT s.*, u.display_name AS streamer_name,
+               (SELECT COUNT(*) FROM stream_products sp WHERE sp.stream_id = s.id) AS products_count
                FROM streams s JOIN users u ON u.id = s.streamer_id"""
     conds, params = [], []
     if status:
@@ -79,6 +80,9 @@ async def list_streams(status: str | None = None, mine: int = 0,
         include_whip = user is not None and r["streamer_id"] == user.id
         data = stream_row(r, include_whip=include_whip)
         data["streamerName"] = r["streamer_name"]
+        data["productsCount"] = r["products_count"]
+        if r["status"] == "live":
+            data["viewers"] = room_manager.viewer_count(r["id"])
         result.append(data)
     return result
 
@@ -135,14 +139,57 @@ async def start_stream(stream_id: str, user: User = Depends(require_streamer)):
 @router.post("/{stream_id}/end")
 async def end_stream(stream_id: str, user: User = Depends(require_streamer)):
     await _owned_stream(stream_id, user)
+    # Leer peak ANTES de cerrar la sala (end() destruye el room)
+    peak = room_manager.peak_viewers(stream_id)
     db = get_db()
     await db.execute(
-        "UPDATE streams SET status = 'ended', ended_at = ? WHERE id = ?",
-        (int(time.time()), stream_id),
+        "UPDATE streams SET status = 'ended', ended_at = ?, peak_viewers = ? WHERE id = ?",
+        (int(time.time()), peak, stream_id),
     )
     await db.commit()
     await room_manager.end(stream_id)
     return {"ok": True, "status": "ended"}
+
+
+@router.get("/{stream_id}/summary")
+async def stream_summary(stream_id: str, user: User = Depends(require_streamer)):
+    row = await _owned_stream(stream_id, user)
+    db = get_db()
+    cur = await db.execute(
+        """SELECT COUNT(*) AS n, COALESCE(SUM(amount_clp), 0) AS total,
+                  COALESCE(SUM(qty), 0) AS units
+           FROM orders WHERE stream_id = ?""",
+        (stream_id,),
+    )
+    agg = await cur.fetchone()
+    cur = await db.execute(
+        """SELECT p.id, p.name, SUM(o.qty) AS units, SUM(o.amount_clp) AS total
+           FROM orders o JOIN products p ON p.id = o.product_id
+           WHERE o.stream_id = ?
+           GROUP BY p.id ORDER BY total DESC""",
+        (stream_id,),
+    )
+    by_product = [
+        {"productId": r["id"], "name": r["name"], "units": r["units"], "totalClp": r["total"]}
+        for r in await cur.fetchall()
+    ]
+    started, ended = row["started_at"], row["ended_at"]
+    duration = (ended - started) if started and ended else None
+    # Stream aún en vivo: peak actual de la sala supera lo persistido
+    peak = max(row["peak_viewers"], room_manager.peak_viewers(stream_id))
+    return {
+        "streamId": stream_id,
+        "title": row["title"],
+        "status": row["status"],
+        "startedAt": started,
+        "endedAt": ended,
+        "durationSec": duration,
+        "peakViewers": peak,
+        "totalClp": agg["total"],
+        "ordersCount": agg["n"],
+        "units": agg["units"],
+        "byProduct": by_product,
+    }
 
 
 @router.post("/{stream_id}/pin")

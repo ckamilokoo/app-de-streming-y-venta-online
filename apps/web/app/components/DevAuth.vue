@@ -1,26 +1,16 @@
 <script setup lang="ts">
-// Widget de login mock (dev). Con Clerk real se reemplaza por <SignInButton />.
-const { user, login, logout } = useAuth()
-const name = ref('')
-const role = ref<'buyer' | 'streamer'>('buyer')
-
-function submit() {
-  if (name.value.trim()) login(name.value, role.value)
-}
+// Con Clerk real este widget se reemplaza por <UserButton /> + <SignInButton />.
+const { user, logout } = useAuth()
+const { show } = useAuthModal()
 </script>
 
 <template>
-  <form v-if="!user" class="row" @submit.prevent="submit">
-    <input v-model="name" placeholder="Tu nombre" size="12" required />
-    <select v-model="role">
-      <option value="buyer">Comprador</option>
-      <option value="streamer">Streamer</option>
-    </select>
-    <button type="submit" class="primary">Entrar</button>
-  </form>
+  <button v-if="!user" class="primary" @click="show()">Iniciar sesión</button>
   <div v-else class="row">
-    <span class="badge" :class="{ ok: user.role === 'streamer' }">{{ user.role }}</span>
+    <span class="badge" :class="{ streamer: user.role === 'streamer' }">
+      {{ user.role === 'streamer' ? '🎥 streamer' : '🛍️ comprador' }}
+    </span>
     <strong>{{ user.name }}</strong>
-    <button @click="logout">Salir</button>
+    <button class="ghost" @click="logout">Salir</button>
   </div>
 </template>

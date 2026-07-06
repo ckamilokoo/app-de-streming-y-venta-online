@@ -14,7 +14,9 @@ from .auth import User
 
 CHAT_MAX_LEN = 280
 CHAT_MIN_INTERVAL = 1.0  # seg entre mensajes por conexión
+REACT_MIN_INTERVAL = 0.3  # seg entre reacciones por conexión
 VIEWERS_DEBOUNCE = 2.0  # seg
+REACTIONS = {"❤️", "🔥", "👏", "😍", "🎉"}
 
 
 @dataclass
@@ -22,6 +24,7 @@ class _Conn:
     ws: WebSocket
     user: User
     last_chat_ts: float = 0.0
+    last_react_ts: float = 0.0
 
 
 @dataclass
@@ -29,6 +32,7 @@ class Room:
     stream_id: str
     conns: dict[WebSocket, _Conn] = field(default_factory=dict)
     pinned_product: dict[str, Any] | None = None
+    peak: int = 0
     _viewers_task: asyncio.Task | None = None
 
 
@@ -47,9 +51,18 @@ class RoomManager:
         await ws.accept()
         room = self._room(stream_id)
         room.conns[ws] = _Conn(ws=ws, user=user)
+        room.peak = max(room.peak, len(room.conns))
         # Estado actual solo al que entra
         await self._send(ws, {"t": "pinned", "product": room.pinned_product})
         self._schedule_viewers(room)
+
+    def viewer_count(self, stream_id: str) -> int:
+        room = self.rooms.get(stream_id)
+        return len(room.conns) if room else 0
+
+    def peak_viewers(self, stream_id: str) -> int:
+        room = self.rooms.get(stream_id)
+        return room.peak if room else 0
 
     def disconnect(self, stream_id: str, ws: WebSocket) -> None:
         room = self.rooms.get(stream_id)
@@ -88,10 +101,24 @@ class RoomManager:
                     "t": "chat",
                     "userId": user.id,
                     "name": user.name,
+                    "role": user.role,
                     "text": text,
                     "ts": int(time.time() * 1000),
                 },
             )
+
+        elif t == "react":
+            conn = room.conns.get(ws)
+            if conn is None:
+                return
+            emoji = msg.get("emoji")
+            if emoji not in REACTIONS:
+                return
+            now = time.monotonic()
+            if now - conn.last_react_ts < REACT_MIN_INTERVAL:
+                return
+            conn.last_react_ts = now
+            await self.broadcast(stream_id, {"t": "react", "emoji": emoji})
 
         elif t == "sync":
             await self._send(ws, {"t": "pinned", "product": room.pinned_product})

@@ -9,6 +9,8 @@
   --accent-hover: #8273ff;
   --live: #ff4d5e;
   --ok: #2ecc8f;
+  --warn: #f5a623;
+  --grad-live: linear-gradient(135deg, #6d5cff 0%, #ff4d5e 100%);
 }
 
 * { box-sizing: border-box; }
@@ -23,7 +25,7 @@ html, body, #__nuxt {
 
 a { color: inherit; text-decoration: none; }
 
-h1, h2, h3 { margin: 0 0 .5rem; font-weight: 650; }
+h1, h2, h3, h4 { margin: 0 0 .5rem; font-weight: 650; }
 
 button {
   font: inherit;
@@ -33,12 +35,22 @@ button {
   padding: .5rem .9rem;
   border-radius: 8px;
   cursor: pointer;
+  transition: border-color .15s, background .15s, transform .1s;
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
+button:active:not(:disabled) { transform: scale(.97); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); }
 button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 button.danger { background: var(--live); border-color: var(--live); }
+button.buy {
+  background: var(--grad-live);
+  border: none;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+button.buy:hover:not(:disabled) { filter: brightness(1.15); }
+button.ghost { background: transparent; }
 
 input, select, textarea {
   font: inherit;
@@ -50,7 +62,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 
-.container { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+.container { max-width: 1180px; margin: 0 auto; padding: 1.25rem; }
 
 .panel {
   background: var(--panel);
@@ -62,15 +74,63 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .muted { color: var(--muted); }
 
 .badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
   padding: .15rem .55rem;
   border-radius: 999px;
   font-size: .75rem;
-  font-weight: 600;
+  font-weight: 700;
   background: var(--panel-2);
   border: 1px solid var(--border);
 }
-.badge.live { background: var(--live); border-color: var(--live); color: #fff; }
+.badge.live {
+  background: var(--live);
+  border-color: var(--live);
+  color: #fff;
+  letter-spacing: .05em;
+}
+.badge.live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 1.4s ease-in-out infinite;
+}
 .badge.ok { background: var(--ok); border-color: var(--ok); color: #06281c; }
+.badge.streamer { background: var(--grad-live); border: none; color: #fff; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(.7); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float-up {
+  0% { opacity: 0; transform: translateY(0) scale(.6); }
+  12% { opacity: 1; transform: translateY(-14px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-130px) scale(1); }
+}
 
 .row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+
+.stock-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.stock-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ok);
+  transition: width .4s ease;
+}
+.stock-bar.low > i { background: var(--warn); }
+.stock-bar.critical > i { background: var(--live); }

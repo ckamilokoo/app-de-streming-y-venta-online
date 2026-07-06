@@ -11,6 +11,8 @@ export function useStreamRoom(streamId: string) {
   const viewers = ref(0)
   const ended = ref(false)
   const connected = ref(false)
+  const reactions = ref<{ id: number; emoji: string }[]>([])
+  let reactSeq = 0
   const stockListeners: Array<(productId: string, stock: number) => void> = []
 
   let ws: WebSocket | null = null
@@ -52,6 +54,15 @@ export function useStreamRoom(streamId: string) {
           if (pinned.value?.id === msg.productId) pinned.value.stock = msg.stock
           stockListeners.forEach((fn) => fn(msg.productId, msg.stock))
           break
+        case 'react': {
+          const id = ++reactSeq
+          reactions.value.push({ id, emoji: msg.emoji })
+          // La animación dura 2.5s; limpiar para no acumular nodos
+          setTimeout(() => {
+            reactions.value = reactions.value.filter((r) => r.id !== id)
+          }, 2600)
+          break
+        }
         case 'stream_ended':
           ended.value = true
           break
@@ -73,6 +84,12 @@ export function useStreamRoom(streamId: string) {
     }
   }
 
+  function sendReact(emoji: string) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ t: 'react', emoji }))
+    }
+  }
+
   function onStock(fn: (productId: string, stock: number) => void) {
     stockListeners.push(fn)
   }
@@ -85,5 +102,8 @@ export function useStreamRoom(streamId: string) {
 
   onBeforeUnmount(close)
 
-  return { messages, pinned, viewers, ended, connected, connect, sendChat, onStock, close }
+  return {
+    messages, pinned, viewers, ended, connected, reactions,
+    connect, sendChat, sendReact, onStock, close,
+  }
 }
